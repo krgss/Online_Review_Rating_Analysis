@@ -1,0 +1,76 @@
+# Use, modification, and distribution are
+# subject to the Boost Software License, Version 1.0. (See accompanying
+# file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+#
+# Copyright Hans Dembinski 2019.
+#
+# Based on original work by Antony Polukhin, see https://svn.boost.org/trac/boost/wiki/TravisCoveralss
+
+language: cpp
+os: linux
+dist: xenial
+
+branches:
+  only:
+    - master
+    - develop
+
+matrix:
+  include:
+    - name: "clang-osx"
+      os: osx
+      before_script:
+        - mkdir build
+        - cd build
+        - cmake ..
+      script:
+        - ctest -j2
+
+    # gcc-7 and gcc-8 produce broken coverage data, so we use gcc-5
+    - name: "gcc-5: coverage"
+      script:
+        - ../../b2 -j2 toolset=gcc-5 cxxstd=14 warnings-as-errors=on coverage=on test
+        - GCOV=gcov-5 tools/cov.sh
+
+    - name: "gcc-5: no-exceptions, no-rtti"
+      script:
+        - ../../b2 -j2 toolset=gcc-5 cxxstd=14 warnings-as-errors=on
+          cxxflags="-fno-exceptions -fno-rtti" test//minimal
+
+    - name: "clang: sanitizers"
+      sudo: required # by leak sanitizer
+      script:
+        - UBSAN_OPTIONS=print_stacktrace=1
+          LSAN_OPTIONS=verbosity=1:log_threads=1
+          ASAN_OPTIONS=detect_leaks=1:detect_stack_use_after_return=1
+          ../../b2 -j2 toolset=clang cxxstd=14
+          variant=histogram_ubasan warnings-as-errors=on
+
+    - name: "gcc-8: c++latest"
+      addons:
+        apt:
+          sources: ubuntu-toolchain-r-test
+          packages: g++-8
+      script:
+        - ../../b2 -j2 toolset=gcc-8 cxxstd=latest warnings-as-errors=on
+
+before_script:
+  # clone minimal set of Boost libraries
+  - test "$TRAVIS_BRANCH" == "master" && BRANCH=master || BRANCH=develop
+  - git clone -b $BRANCH --depth 5 https://github.com/boostorg/boost.git ../boost
+  - cd ../boost
+  - git submodule update --init --depth 5 tools/build tools/boostdep
+
+  # replace Boost module with this project and install Boost dependencies
+  - LIBRARY=$(basename $TRAVIS_BUILD_DIR)
+  - rm -rf libs/$LIBRARY
+  - mv $TRAVIS_BUILD_DIR libs/$LIBRARY
+  - python tools/boostdep/depinst/depinst.py --git_args "--depth 5 --jobs 3" $LIBRARY
+
+  # add missing toolsets and preparing Boost headers
+  - ./bootstrap.sh
+  - ./b2 headers
+  - cd libs/$LIBRARY
+
+notifications:
+  email: false

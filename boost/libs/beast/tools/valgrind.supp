@@ -1,0 +1,24 @@
+{
+   zlib_fill_window_no_init
+   Memcheck:Cond
+   fun:fill_window
+}
+{
+   Ignore OpenSSL malloc
+   Memcheck:Leak
+   fun:malloc
+   fun:CRYPTO_malloc
+   obj:*libcrypto*
+}
+{
+   Ignore OpenSSL realloc
+   Memcheck:Leak
+   fun:realloc
+   fun:CRYPTO_realloc
+   obj:*libcrypto*
+}
+{
+    OpenSSL Non-Purify
+    Memcheck:Cond
+    obj:*libcrypto*
+}
